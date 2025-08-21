@@ -193,4 +193,8 @@ if __name__ == "__main__":
     
     # iterate one batch
     
-    batch = next
+    batch = next(iter(loader))
+    images, labels = batch
+    print("images.shape: ", images.shape)
+    print("labels.shape: ", labels.shape)
+    print("labels dtypes: ", labels.dtype, "min/max:", labels.min().item(), labels.max().item())
