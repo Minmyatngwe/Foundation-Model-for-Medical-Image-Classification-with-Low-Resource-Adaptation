@@ -14,3 +14,7 @@ import timm
 from sklearn.metrics import roc_auc_score, f1_score
 from PyTorch_Dataset_DataLoader.dataset_dataloader
 
+# ------------------Config files----------------------------
+
+DEVICE  = "cuda" if torch.cuda.is_available() else "cpu"
+NUM_CLASSES = 14
