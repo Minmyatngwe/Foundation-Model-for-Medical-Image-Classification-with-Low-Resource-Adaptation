@@ -4,12 +4,14 @@ import torch
 import sys
 from pathlib import Path
 
-# --- Add the pipeline directory to the Python path ---
-# This ensures we can import our scripts
+# --- ROBUST PATHING ---
+# This makes sure the script knows where it is and can find all other files
 SCRIPT_DIR = Path(__file__).resolve().parent
+# We add the 'pipeline' folder to the path so imports work
 sys.path.append(str(SCRIPT_DIR / "pipeline"))
 
 # --- Import your custom functions ---
+# We can now be sure this import will work
 from predict_and_explain import load_full_model_for_inference, get_transforms, generate_attention_map
 
 # -----------------------------
@@ -18,16 +20,17 @@ from predict_and_explain import load_full_model_for_inference, get_transforms, g
 st.set_page_config(page_title="AI X-Ray Analysis", page_icon="🤖", layout="wide")
 
 # -----------------------------
-# --- MODEL LOADING (Cached) ---
+# --- MODEL LOADING (Cached & with Correct Paths) ---
 # -----------------------------
 @st.cache_resource
 def load_model():
-    # Use relative paths from the root of the project
-    chexpert_path = "checkpoints/best_model_epoch9_auc0.7952.pth"
-    lora_path = "checkpoints_mura_lora/best_model_adapters/"
-    # IMPORTANT: Ensure your checkpoint and adapter files are available for the cloud service.
-    # For large files, you might need to use Git LFS or host them separately.
-    # For now, we assume they are small enough to be pushed to GitHub.
+    # --- THIS IS THE FIX ---
+    # We build absolute paths from the script's location to ensure they are always correct.
+    # Make sure these folder and file names EXACTLY match your repository.
+    project_root = Path(__file__).resolve().parent
+    chexpert_path = project_root / "checkpoints_full_dataset" / "best_model_epoch9_auc0.7952.pth"
+    lora_path = project_root / "checkpoints_mura_lora" / "best_model_adapters"
+    
     model = load_full_model_for_inference(chexpert_path, lora_path)
     return model
 
@@ -35,12 +38,12 @@ try:
     model = load_model()
     _, val_transform = get_transforms()
     model_loaded = True
-except FileNotFoundError:
-    st.error("Model files not found. Ensure the checkpoint and adapter files are in the repository.")
+except FileNotFoundError as e:
+    st.error(f"Model files not found. The script looked for a file at: {e.filename}. Please ensure this path is correct in your GitHub repository.")
     model_loaded = False
 
 # -----------------------------
-# --- UI LAYOUT ---
+# --- UI LAYOUT (No changes needed here) ---
 # -----------------------------
 st.title("🤖 AI-Powered X-Ray Anomaly Detection")
 st.sidebar.title("About")
@@ -62,7 +65,6 @@ if uploaded_file is not None and model_loaded:
 
     with col2:
         with st.spinner("🧠 Analyzing..."):
-            # --- Direct Model Prediction ---
             image_tensor = val_transform(image_pil).unsqueeze(0)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model.to(device)
@@ -72,10 +74,8 @@ if uploaded_file is not None and model_loaded:
                 logits = model(image_tensor)
                 probabilities = torch.nn.functional.softmax(logits, dim=1).cpu().numpy()[0]
 
-            # --- Generate Explanation ---
             attention_map_img = generate_attention_map(model, image_tensor, image_pil)
 
-            # --- Display Results ---
             st.subheader("📊 Analysis Results")
             class_names = ["Normal (Negative)", "Abnormal (Positive)"]
             pred_idx = probabilities.argmax()
