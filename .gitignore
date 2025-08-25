@@ -1,2 +1,26 @@
-/data
 /pipeline/deleting_zone_identifier.py
+
+# Python virtual environment
+med-found/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+
+# Large Data Files (NEVER commit data to Git)
+data/
+
+# Model Checkpoints (These are large binary files)
+checkpoints/
+checkpoints_mura_lora/
+checkpoints_full_dataset/
+
+# Generated output files
+attention_map_output.png
+grad_cam_output.png
