@@ -23,7 +23,7 @@ st.set_page_config(page_title="AI X-Ray Analysis", page_icon="🤖", layout="wid
 @st.cache_resource
 def load_model():
     # Use relative paths from the root of the project
-    chexpert_path = "checkpoints/best_model_epoch9_auc0.7613.pth"
+    chexpert_path = "checkpoints/best_model_epoch9_auc0.7952.pth"
     lora_path = "checkpoints_mura_lora/best_model_adapters/"
     # IMPORTANT: Ensure your checkpoint and adapter files are available for the cloud service.
     # For large files, you might need to use Git LFS or host them separately.
