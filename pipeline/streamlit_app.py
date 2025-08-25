@@ -45,7 +45,7 @@ except FileNotFoundError as e:
 # -----------------------------
 # --- UI LAYOUT (No changes needed here) ---
 # -----------------------------
-st.title("🤖 AI-Powered X-Ray Anomaly Detection")
+st.title("🤖 Detection of Anomaly in human body through Xray")
 st.sidebar.title("About")
 st.sidebar.info(
     "This is a demonstration of a medical imaging foundation model, pre-trained on CheXpert "
