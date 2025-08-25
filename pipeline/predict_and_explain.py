@@ -18,7 +18,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 IMG_SIZE = 224
 
 # --- PATHS (ACTION REQUIRED) ---
-CHEXPERT_MODEL_PATH = "checkpoints/best_model_epoch9_auc0.7613.pth"
+CHEXPERT_MODEL_PATH = "checkpoints/best_model_epoch9_auc0.7952.pth"
 LORA_ADAPTER_PATH = "checkpoints_mura_lora/best_model_adapters/" # Updated to cleaner path
 
 # !! YOU MUST PROVIDE AN IMAGE TO TEST !!

@@ -29,7 +29,7 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 
 # --- PATHS (ACTION REQUIRED) ---
 # This path is correct based on your log.
-CHEXPERT_MODEL_PATH = "checkpoints/best_model_epoch9_auc0.7613.pth" 
+CHEXPERT_MODEL_PATH = "checkpoints/best_model_epoch9_auc0.7952.pth" 
 
 # !! YOU MUST UPDATE THIS PATH !!
 MURA_ROOT_DIR = "data/MURA musculoskeletal radiographs datasets/MURA-v1.1" # e.g., "data/mura/MURA-v1.1"
