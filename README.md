@@ -1,6 +1,7 @@
 # Medical Imaging Foundation Model for X-Ray Classification and Low-Resource Adaptation
 
 **Author:** Akshat Gupta
+
 **Date:** August 25, 2025
 
 You can try the model here:
