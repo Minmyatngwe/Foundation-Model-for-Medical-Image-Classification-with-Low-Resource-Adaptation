@@ -1,5 +1,5 @@
 import torch
-from predict_and_explain import create_foundation_model
+from pipeline.predict_and_explain import create_foundation_model
 
 # The path to your local model file
 MODEL_PATH = "checkpoints/best_model_epoch18_auc0.7952.pth"
