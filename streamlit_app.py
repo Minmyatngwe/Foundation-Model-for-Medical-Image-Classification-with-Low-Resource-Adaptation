@@ -84,8 +84,22 @@ def load_model_from_hub():
     HF_REPO_ID = "akshatgg/CXR-MURA-Foundation-Model"
     
     with st.spinner(f"Downloading model files from Hugging Face Hub... This may take a moment."):
-        chexpert_path = hf_hub_download(repo_id=HF_REPO_ID, filename="best_model_epoch18_auc0.7952.pth")
-        adapter_file_path = hf_hub_download(repo_id=HF_REPO_ID, filename="adapter_model.safensors")
+        # --- THIS IS THE FIX ---
+        # Provide the FULL path of the files within the repository.
+        chexpert_path = hf_hub_download(
+            repo_id=HF_REPO_ID, 
+            filename="checkpoints_full_dataset/best_model_epoch18_auc0.7952.pth"
+        )
+        adapter_file_path = hf_hub_download(
+            repo_id=HF_REPO_ID, 
+            filename="checkpoints_mura_lora/best_model_adapters/adapter_model.safetensors"
+        )
+        # We also need the config file from the same directory
+        hf_hub_download(
+            repo_id=HF_REPO_ID, 
+            filename="checkpoints_mura_lora/best_model_adapters/adapter_config.json"
+        )
+        
         lora_path_dir = Path(adapter_file_path).parent
 
     model = load_full_model_for_inference(chexpert_path, lora_path_dir)
@@ -103,12 +117,12 @@ try:
     val_transform = get_transforms()
     model_loaded = True
 except Exception as e:
-    st.error(f"Failed to load model from Hugging Face Hub. Please ensure your repository name is correct and that all files are present. Error: {e}")
+    st.error(f"Failed to load model from Hugging Face Hub. Please double-check your repository name and that all files are present. Error: {e}")
 
+# ... (The rest of your UI code is identical to the last version) ...
 uploaded_file = st.file_uploader("Upload an X-ray image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None and model_loaded:
-    # ... (rest of the UI code is identical)
     col1, col2 = st.columns(2)
     image_pil = Image.open(uploaded_file).convert("RGB")
     with col1:
