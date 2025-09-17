@@ -1,59 +1,116 @@
 import streamlit as st
 from PIL import Image
 import torch
-import sys
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import transforms
+import numpy as np
+import cv2
+import timm
+from peft import PeftModel
 from pathlib import Path
-
-# --- ROBUST PATHING ---
-# This makes sure the script knows where it is and can find all other files
-SCRIPT_DIR = Path(__file__).resolve().parent
-# We add the 'pipeline' folder to the path so imports work
-sys.path.append(str(SCRIPT_DIR / "pipeline"))
-
-# --- Import your custom functions ---
-# We can now be sure this import will work
-from pipeline.predict_and_explain import load_full_model_for_inference, get_transforms, generate_attention_map
+from huggingface_hub import hf_hub_download
 
 # -----------------------------
 # --- PAGE CONFIGURATION ---
 # -----------------------------
 st.set_page_config(page_title="AI X-Ray Analysis", page_icon="🤖", layout="wide")
 
+# -------------------------------------------------------------------
+# --- ALL HELPER FUNCTIONS ARE NOW INSIDE THIS SINGLE FILE ---
+# -------------------------------------------------------------------
+
+def create_foundation_model(num_classes_chexpert=14, model_name="vit_base_patch16_224"):
+    """Helper to create the base ViT model structure."""
+    model = timm.create_model(model_name, pretrained=False)
+    model.head = nn.Linear(model.head.in_features, num_classes_chexpert)
+    return model
+
+def get_transforms(img_size=224):
+    """Return the validation transforms for preprocessing."""
+    return transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+def load_full_model_for_inference(chexpert_path, lora_path_dir):
+    """Loads the base model, adds LoRA adapters, and prepares it for inference."""
+    model = create_foundation_model()
+    checkpoint = torch.load(chexpert_path, map_location='cpu', weights_only=False)
+    model.load_state_dict(checkpoint['model_state'])
+    model.head = nn.Linear(model.head.in_features, 2)
+    model = PeftModel.from_pretrained(model, lora_path_dir)
+    model = model.merge_and_unload()
+    model.eval()
+    return model
+
+def generate_attention_map(model, input_tensor, original_image_pil, img_size=224):
+    """Generates and returns a PIL Image of the attention map visualization."""
+    attention_maps = []
+    hooks = []
+    device = input_tensor.device
+    for block in model.blocks:
+        def hook_fn(module, args, output):
+            attention_maps.append(args[0])
+        hooks.append(block.attn.attn_drop.register_forward_hook(hook_fn))
+
+    with torch.no_grad():
+        model(input_tensor)
+
+    for hook in hooks:
+        hook.remove()
+
+    num_patches = (img_size // model.patch_embed.patch_size[0]) ** 2
+    residual_attn = torch.eye(num_patches + 1, device=device)
+    attn_mats = [attn.mean(dim=1) for attn in attention_maps]
+    for attn_mat in attn_mats:
+        aug_attn_mat = attn_mat + torch.eye(attn_mat.size(1), device=device)
+        aug_attn_mat = aug_attn_mat / aug_attn_mat.sum(dim=-1).unsqueeze(-1)
+        residual_attn = torch.matmul(aug_attn_mat, residual_attn)
+
+    grid_attn = residual_attn[0, 1:]
+    grid_size = int(np.sqrt(num_patches))
+    attention_grid = grid_attn.reshape(grid_size, grid_size).cpu().numpy()
+
+    mask = cv2.resize(attention_grid, (img_size, img_size))
+    mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
+    heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    original_img_np = np.array(original_image_pil.resize((img_size, img_size)))
+    superimposed_img = np.uint8(0.6 * original_img_np + 0.4 * heatmap)
+    return Image.fromarray(superimposed_img)
+
 # -----------------------------
-# --- MODEL LOADING (Cached & with Correct Paths) ---
+# --- MODEL LOADING (From Hugging Face Hub) ---
 # -----------------------------
 @st.cache_resource
-def load_model():
-    # --- THIS IS THE FIX ---
-    # We build absolute paths from the script's location to ensure they are always correct.
-    # Make sure these folder and file names EXACTLY match your repository.
-    project_root = Path(__file__).resolve().parent
-    chexpert_path = project_root / "checkpoints_full_dataset" / "best_model_epoch9_auc0.7952.pth"
-    lora_path = project_root / "checkpoints_mura_lora" / "best_model_adapters"
-    
-    model = load_full_model_for_inference(chexpert_path, lora_path)
+def load_model_from_hub():
+    # --- YOUR HUGGING FACE REPOSITORY ID ---
+    HF_REPO_ID = "akshatgg/CXR-MURA-Foundation-Model"
+
+    with st.spinner(f"Downloading model files from Hugging Face Hub... This may take a moment."):
+        chexpert_path = hf_hub_download(repo_id=HF_REPO_ID, filename="best_model_epoch18_auc0.7952.pth")
+        adapter_file_path = hf_hub_download(repo_id=HF_REPO_ID, filename="adapter_model.safetensors")
+        lora_path_dir = Path(adapter_file_path).parent
+
+    st.success("Model loaded successfully!")
+    model = load_full_model_for_inference(chexpert_path, lora_path_dir)
     return model
 
 try:
-    model = load_model()
-    _, val_transform = get_transforms()
+    model = load_model_from_hub()
+    val_transform = get_transforms()
     model_loaded = True
-except FileNotFoundError as e:
-    st.error(f"Model files not found. The script looked for a file at: {e.filename}. Please ensure this path is correct in your GitHub repository.")
+except Exception as e:
+    st.error(f"Failed to load model from Hugging Face Hub. Please double-check your repository name and that all files are present. Error: {e}")
     model_loaded = False
 
 # -----------------------------
-# --- UI LAYOUT (No changes needed here) ---
+# --- UI LAYOUT ---
 # -----------------------------
-st.title("🤖 Detection of Anomaly in human body through Xray")
-st.sidebar.title("About")
-st.sidebar.info(
-    "This is a demonstration of a medical imaging foundation model, pre-trained on CheXpert "
-    "and adapted for the MURA dataset using LoRA."
-    "\n\n**Disclaimer:** This tool is for educational purposes only."
-)
+st.title("🤖 AI-Powered X-Ray Anomaly Detection")
 
-st.write("Upload a musculoskeletal X-ray to classify it and see where the AI is looking.")
 uploaded_file = st.file_uploader("Upload an X-ray image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None and model_loaded:
@@ -72,7 +129,7 @@ if uploaded_file is not None and model_loaded:
             
             with torch.no_grad():
                 logits = model(image_tensor)
-                probabilities = torch.nn.functional.softmax(logits, dim=1).cpu().numpy()[0]
+                probabilities = F.softmax(logits, dim=1).cpu().numpy()[0]
 
             attention_map_img = generate_attention_map(model, image_tensor, image_pil)
 
@@ -88,8 +145,4 @@ if uploaded_file is not None and model_loaded:
                 delta=f"Confidence: {confidence:.2%}",
                 delta_color=("normal" if pred_name == "Normal (Negative)" else "inverse")
             )
-
             st.image(attention_map_img, caption="🧠 AI Attention Map", use_container_width=True)
-            
-            with st.expander("See Detailed Probabilities"):
-                st.write({name: f"{prob:.4f}" for name, prob in zip(class_names, probabilities)})
