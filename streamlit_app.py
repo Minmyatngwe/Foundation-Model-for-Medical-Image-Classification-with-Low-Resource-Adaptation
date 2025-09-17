@@ -12,7 +12,7 @@ sys.path.append(str(SCRIPT_DIR / "pipeline"))
 
 # --- Import your custom functions ---
 # We can now be sure this import will work
-from predict_and_explain import load_full_model_for_inference, get_transforms, generate_attention_map
+from pipeline.predict_and_explain import load_full_model_for_inference, get_transforms, generate_attention_map
 
 # -----------------------------
 # --- PAGE CONFIGURATION ---
