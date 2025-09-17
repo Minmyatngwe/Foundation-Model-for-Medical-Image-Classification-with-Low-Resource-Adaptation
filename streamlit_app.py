@@ -88,16 +88,16 @@ def load_model_from_hub():
         # Provide the FULL path of the files within the repository.
         chexpert_path = hf_hub_download(
             repo_id=HF_REPO_ID, 
-            filename="checkpoints_full_dataset/best_model_epoch18_auc0.7952.pth"
+            filename="best_model_epoch18_auc0.7952.pth"
         )
         adapter_file_path = hf_hub_download(
             repo_id=HF_REPO_ID, 
-            filename="checkpoints_mura_lora/best_model_adapters/adapter_model.safetensors"
+            filename="adapter_model.safetensors"
         )
         # We also need the config file from the same directory
         hf_hub_download(
             repo_id=HF_REPO_ID, 
-            filename="checkpoints_mura_lora/best_model_adapters/adapter_config.json"
+            filename="adapter_config.json"
         )
         
         lora_path_dir = Path(adapter_file_path).parent
