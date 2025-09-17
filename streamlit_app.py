@@ -19,15 +19,12 @@ st.set_page_config(page_title="AI X-Ray Analysis", page_icon="🤖", layout="wid
 # -------------------------------------------------------------------
 # --- ALL HELPER FUNCTIONS ARE NOW INSIDE THIS SINGLE FILE ---
 # -------------------------------------------------------------------
-
 def create_foundation_model(num_classes_chexpert=14, model_name="vit_base_patch16_224"):
-    """Helper to create the base ViT model structure."""
     model = timm.create_model(model_name, pretrained=False)
     model.head = nn.Linear(model.head.in_features, num_classes_chexpert)
     return model
 
 def get_transforms(img_size=224):
-    """Return the validation transforms for preprocessing."""
     return transforms.Compose([
         transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),
@@ -35,7 +32,6 @@ def get_transforms(img_size=224):
     ])
 
 def load_full_model_for_inference(chexpert_path, lora_path_dir):
-    """Loads the base model, adds LoRA adapters, and prepares it for inference."""
     model = create_foundation_model()
     checkpoint = torch.load(chexpert_path, map_location='cpu', weights_only=False)
     model.load_state_dict(checkpoint['model_state'])
@@ -46,7 +42,6 @@ def load_full_model_for_inference(chexpert_path, lora_path_dir):
     return model
 
 def generate_attention_map(model, input_tensor, original_image_pil, img_size=224):
-    """Generates and returns a PIL Image of the attention map visualization."""
     attention_maps = []
     hooks = []
     device = input_tensor.device
@@ -86,63 +81,52 @@ def generate_attention_map(model, input_tensor, original_image_pil, img_size=224
 # -----------------------------
 @st.cache_resource
 def load_model_from_hub():
-    # --- YOUR HUGGING FACE REPOSITORY ID ---
     HF_REPO_ID = "akshatgg/CXR-MURA-Foundation-Model"
-
+    
     with st.spinner(f"Downloading model files from Hugging Face Hub... This may take a moment."):
         chexpert_path = hf_hub_download(repo_id=HF_REPO_ID, filename="best_model_epoch18_auc0.7952.pth")
-        adapter_file_path = hf_hub_download(repo_id=HF_REPO_ID, filename="adapter_model.safetensors")
+        adapter_file_path = hf_hub_download(repo_id=HF_REPO_ID, filename="adapter_model.safensors")
         lora_path_dir = Path(adapter_file_path).parent
 
-    st.success("Model loaded successfully!")
     model = load_full_model_for_inference(chexpert_path, lora_path_dir)
     return model
 
+# -----------------------------
+# --- MAIN SCRIPT LOGIC ---
+# -----------------------------
+st.title("🤖 AI-Powered X-Ray Anomaly Detection")
+
+model_loaded = False
 try:
     model = load_model_from_hub()
+    st.success("Model loaded successfully!")
     val_transform = get_transforms()
     model_loaded = True
 except Exception as e:
-    st.error(f"Failed to load model from Hugging Face Hub. Please double-check your repository name and that all files are present. Error: {e}")
-    model_loaded = False
-
-# -----------------------------
-# --- UI LAYOUT ---
-# -----------------------------
-st.title("🤖 AI-Powered X-Ray Anomaly Detection")
+    st.error(f"Failed to load model from Hugging Face Hub. Please ensure your repository name is correct and that all files are present. Error: {e}")
 
 uploaded_file = st.file_uploader("Upload an X-ray image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None and model_loaded:
+    # ... (rest of the UI code is identical)
     col1, col2 = st.columns(2)
     image_pil = Image.open(uploaded_file).convert("RGB")
-    
     with col1:
         st.image(image_pil, caption="Uploaded X-Ray", use_container_width=True)
-
     with col2:
         with st.spinner("🧠 Analyzing..."):
             image_tensor = val_transform(image_pil).unsqueeze(0)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model.to(device)
             image_tensor = image_tensor.to(device)
-            
             with torch.no_grad():
                 logits = model(image_tensor)
                 probabilities = F.softmax(logits, dim=1).cpu().numpy()[0]
-
             attention_map_img = generate_attention_map(model, image_tensor, image_pil)
-
             st.subheader("📊 Analysis Results")
             class_names = ["Normal (Negative)", "Abnormal (Positive)"]
             pred_idx = probabilities.argmax()
             pred_name = class_names[pred_idx]
             confidence = probabilities[pred_idx]
-            
-            st.metric(
-                label="Prediction",
-                value=pred_name,
-                delta=f"Confidence: {confidence:.2%}",
-                delta_color=("normal" if pred_name == "Normal (Negative)" else "inverse")
-            )
+            st.metric(label="Prediction", value=pred_name, delta=f"Confidence: {confidence:.2%}", delta_color=("normal" if pred_name == "Normal (Negative)" else "inverse"))
             st.image(attention_map_img, caption="🧠 AI Attention Map", use_container_width=True)
