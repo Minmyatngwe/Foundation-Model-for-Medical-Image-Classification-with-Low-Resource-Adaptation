@@ -3,16 +3,16 @@ from PIL import Image
 import torch
 import sys
 from pathlib import Path
-from huggingface_hub import hf_hub_download
 
-# --- ROBUST PATHING & IMPORTS ---
-# This ensures the script can always find the 'pipeline' folder
+# --- ROBUST PATHING ---
+# This makes sure the script knows where it is and can find all other files
 SCRIPT_DIR = Path(__file__).resolve().parent
+# We add the 'pipeline' folder to the path so imports work
 sys.path.append(str(SCRIPT_DIR / "pipeline"))
 
-# Now we can reliably import our custom functions
-from predict_and_explain import create_foundation_model, get_transforms, generate_attention_map
-from peft import PeftModel
+# --- Import your custom functions ---
+# We can now be sure this import will work
+from pipeline.predict_and_explain import load_full_model_for_inference, get_transforms, generate_attention_map
 
 # -----------------------------
 # --- PAGE CONFIGURATION ---
@@ -20,53 +20,40 @@ from peft import PeftModel
 st.set_page_config(page_title="AI X-Ray Analysis", page_icon="🤖", layout="wide")
 
 # -----------------------------
-# --- Redefined Loading Function (for HF Hub) ---
-# -----------------------------
-# This is a modified version of your original loading function
-def load_full_model_for_inference(chexpert_path, lora_path_dir):
-    model = create_foundation_model(num_classes_chexpert=14)
-    checkpoint = torch.load(chexpert_path, map_location='cpu', weights_only=False) 
-    model.load_state_dict(checkpoint['model_state'])
-    model.head = torch.nn.Linear(model.head.in_features, 2)
-    model = PeftModel.from_pretrained(model, lora_path_dir)
-    model = model.merge_and_unload()
-    model.eval()
-    print("Model ready for inference.")
-    return model
-
-# -----------------------------
-# --- MODEL LOADING (From Hugging Face Hub) ---
+# --- MODEL LOADING (Cached & with Correct Paths) ---
 # -----------------------------
 @st.cache_resource
-def load_model_from_hub():
-    # --- IMPORTANT: UPDATE THIS WITH YOUR DETAILS ---
-    HF_REPO_ID = "akshatgupta-dev/Foundation-Model-for-Medical-Image-Classification-with-Low-Resource-Adaptation"
+def load_model():
+    # --- THIS IS THE FIX ---
+    # We build absolute paths from the script's location to ensure they are always correct.
+    # Make sure these folder and file names EXACTLY match your repository.
+    project_root = Path(__file__).resolve().parent
+    chexpert_path = project_root / "checkpoints_full_dataset" / "best_model_epoch9_auc0.7952.pth"
+    lora_path = project_root / "checkpoints_mura_lora" / "best_model_adapters"
     
-    st.info(f"Downloading model files from Hugging Face Hub: {HF_REPO_ID}. This may take a moment on first run.")
-    
-    # Download each file from the Hub. It will be cached locally.
-    chexpert_path = hf_hub_download(repo_id=HF_REPO_ID, filename="checkpoints_full_dataset/best_model_epoch9_auc0.7952.pth")
-    # Note: peft requires the directory, so we download one file to find the directory
-    adapter_file_path = hf_hub_download(repo_id=HF_REPO_ID, filename="checkpoints_mura_lora/best_model_adapters/adapter_model.safetensors")
-    lora_path_dir = Path(adapter_file_path).parent
-
-    model = load_full_model_for_inference(chexpert_path, lora_path_dir)
+    model = load_full_model_for_inference(chexpert_path, lora_path)
     return model
 
 try:
-    model = load_model_from_hub()
+    model = load_model()
     _, val_transform = get_transforms()
     model_loaded = True
-except Exception as e:
-    st.error(f"Failed to load model from Hugging Face Hub. Please ensure the HF_REPO_ID is correct and files exist. Error: {e}")
+except FileNotFoundError as e:
+    st.error(f"Model files not found. The script looked for a file at: {e.filename}. Please ensure this path is correct in your GitHub repository.")
     model_loaded = False
 
 # -----------------------------
-# --- UI LAYOUT ---
+# --- UI LAYOUT (No changes needed here) ---
 # -----------------------------
-st.title("🤖 AI-Powered X-Ray Anomaly Detection")
+st.title("🤖 Detection of Anomaly in human body through Xray")
+st.sidebar.title("About")
+st.sidebar.info(
+    "This is a demonstration of a medical imaging foundation model, pre-trained on CheXpert "
+    "and adapted for the MURA dataset using LoRA."
+    "\n\n**Disclaimer:** This tool is for educational purposes only."
+)
 
-# ... (The rest of your UI code remains exactly the same) ...
+st.write("Upload a musculoskeletal X-ray to classify it and see where the AI is looking.")
 uploaded_file = st.file_uploader("Upload an X-ray image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None and model_loaded:
@@ -103,3 +90,6 @@ if uploaded_file is not None and model_loaded:
             )
 
             st.image(attention_map_img, caption="🧠 AI Attention Map", use_container_width=True)
+            
+            with st.expander("See Detailed Probabilities"):
+                st.write({name: f"{prob:.4f}" for name, prob in zip(class_names, probabilities)})
