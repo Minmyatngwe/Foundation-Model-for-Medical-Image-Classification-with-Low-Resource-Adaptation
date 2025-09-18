@@ -1,1 +1,2 @@
-touch .streamlit/config.toml
+[server]
+folderWatchBlacklist = ["med-found", "data", "checkpoints", "checkpoints_full_dataset", "checkpoints_mura_lora"]
